@@ -546,6 +546,17 @@ function delSet(i){
   savedSets.splice(i,1);
   localStorage.setItem('nflSets',JSON.stringify(savedSets));render();
 }
+// Title abbreviations for printed output only (app UI keeps full names).
+// These shortenings prevent the play name on the left side of the title bar
+// from colliding with the color label on the right side.
+function formatPrintTitle(s){
+  return s
+    .replace(/\bSingle\b/g, 'Sngl')
+    .replace(/\bDouble\b/g, 'Dbl')
+    .replace(/\bTriple\b/g, 'Trpl')
+    .replace(/\bReverse\b/g, 'Rev');
+}
+
 function downloadHdPdf(){
   var cardsToPrint = cards.filter(function(c){
     return c.some(function(x){ return x !== null; });
@@ -677,7 +688,7 @@ function downloadHdPdf(){
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(color.rgb[0], color.rgb[1], color.rgb[2]);
         pdf.setFontSize(7);
-        pdf.text(play.title.toUpperCase(), sx + 3, baselineY);
+        pdf.text(formatPrintTitle(play.title).toUpperCase(), sx + 3, baselineY);
 
         // 4. Color label — RIGHT side, inset 10 space-widths from the right edge
         pdf.setFontSize(10.5);
@@ -723,7 +734,7 @@ function doPrintAndroid(cardsToPrint){
         var labelText = cl + ' ' + (slotIdx + 1);
         var absImg = (p.img.indexOf('://') === -1) ? (basePath + p.img) : p.img;
         cardsHtml += '<div class="sl"><div class="tt">'
-                   +   '<span class="tt-title">' + p.title + '</span>'
+                   +   '<span class="tt-title">' + formatPrintTitle(p.title) + '</span>'
                    +   '<span class="tt-label">' + labelText + '</span>'
                    + '</div>'
                    + '<div class="si"><img src="' + absImg + '"/></div></div>';
@@ -862,7 +873,7 @@ function doPrint(){
         var p = PLAYS[pidx];
         var labelText = colorLabel + ' ' + (slotIdx + 1);
         body += '<div class="sl"><div class="tt">'
-              +   '<span class="tt-title">' + p.title + '</span>'
+              +   '<span class="tt-title">' + formatPrintTitle(p.title) + '</span>'
               +   '<span class="tt-label">' + labelText + '</span>'
               + '</div>'
               + '<div class="si"><img src="' + p.img + '"/></div></div>';
