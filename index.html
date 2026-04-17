@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>NFL Flag — Play Card Builder</title>
+<script src="jspdf.umd.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#printArea { display: none; }
+input, textarea { -webkit-user-select: auto !important; -moz-user-select: auto !important; user-select: auto !important; cursor: text !important; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a1628; color: #e8e4dc; overflow-x: hidden; }
+
+/* SPLASH */
+#splash { position: fixed; inset: 0; z-index: 100; background: #0a1628; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: opacity 0.6s ease; }
+#splash.hide { opacity: 0; pointer-events: none; }
+.splash-logo { width: 78%; max-width: 400px; margin-bottom: 14px; }
+.splash-sub { color: rgba(255,255,255,0.55); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 44px; }
+.splash-btn { background: white; color: #0d1f4e; border: none; border-radius: 50px; padding: 15px 46px; font-size: 15px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; box-shadow: 0 4px 24px rgba(0,0,0,0.5); transition: transform 0.15s; }
+.splash-btn:active { transform: scale(0.97); }
+.splash-flags { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; height: 32%; object-fit: cover; object-position: top center; opacity: 0.85; pointer-events: none; }
+.splash-tap { color: rgba(255,255,255,0.25); font-size: 11px; margin-top: 18px; letter-spacing: 0.12em; position: relative; z-index: 2; margin-bottom: 30%; }
+
+/* APP */
+#app { display: none; flex-direction: column; min-height: 100vh; background: #0a1628; }
+#app.visible { display: flex; }
+
+/* TOPBAR — uses the playbook header texture */
+.topbar {
+  background: #0d1f4e;
+  background-image: url( + HDR + );
+  background-size: cover; background-position: center;
+  padding: 0 14px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 20; height: 54px;
+}
+.topbar-logo { height: 28px; object-fit: contain; }
+.topbar-spacer { flex: 1; }
+.btn-clear { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-clear:active { background: rgba(255,255,255,0.25); }
+.btn-print { background: #e8411a; color: white; border: none; border-radius: 6px; padding: 7px 14px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.btn-print:active { background: #c93510; }
+
+/* TABS */
+.tab-bar { background: #060f1e; padding: 0 12px; display: flex; gap: 2px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.tab-btn { background: transparent; border: none; color: rgba(255,255,255,0.4); padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.tab-btn.active { color: white; border-bottom-color: #e8411a; }
+.tab-count { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 1px 7px; font-size: 10px; }
+.tab-btn.active .tab-count { background: rgba(232,65,26,0.35); color: #ff8060; }
+.tab-btn.done { color: #4ecf6e; }
+.tab-btn.done.active { border-bottom-color: #4ecf6e; }
+.tab-btn.done .tab-count { background: rgba(78,207,110,0.2); color: #4ecf6e; }
+
+/* CARD SECTION */
+.card-section { padding: 14px 12px 4px; background: #0a1628; }
+.card-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #4dcfea; margin-bottom: 8px; }
+.card-template {
+  background: #0a1628;
+  border: none;
+  border-radius: 0;
+  width: 100%;
+  aspect-ratio: 4.5 / 2.125;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  padding: 2.94% 2.78%;
+  position: relative;
+  outline: 1.5px dashed rgba(255,255,255,0.25);
+}
+.card-template.done-card { border-color: #4ecf6e; border-width: 2px; }
+.card-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 100%; height: 100%; border-radius: 4px; overflow: hidden; }
+
+/* SLOTS */
+.drop-slot { border: 1px solid rgba(255,255,255,0.07); overflow: hidden; background: #0e1a2e; display: flex; flex-direction: column; cursor: pointer; transition: background 0.1s; }
+.drop-slot.filled { background: #0a1424; }
+.drop-slot.ready { background: #0e2044; outline: 2px dashed #4dcfea; outline-offset: -2px; }
+.slot-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 3px; }
+.slot-num { font-size: 22px; font-weight: 800; color: rgba(255,255,255,0.12); }
+.slot-hint { font-size: 8px; color: rgba(255,255,255,0.2); text-align: center; padding: 0 6px; line-height: 1.3; }
+.slot-title { background: #0d1f4e; color: white; font-size: 8px; font-weight: 800; padding: 3px 7px; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; border-bottom: 1px solid rgba(77,207,234,0.3); }
+.slot-x { background: none; border: none; color: rgba(255,255,255,0.5); font-size: 14px; line-height: 1; padding: 0 2px; cursor: pointer; touch-action: manipulation; }
+.slot-x:active { color: #e8411a; }
+.slot-img-wrap { flex: 1; overflow: hidden; }
+.slot-img { width: 100%; height: 100%; object-fit: fill; display: block; opacity: 0.92; }
+
+/* COMMIT */
+.commit-wrap { padding: 10px 12px 4px; background: #0a1628; }
+.btn-commit { width: 100%; padding: 12px; background: #0d1f4e; color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; font-size: 13px; font-weight: 800; cursor: pointer; transition: background 0.15s, opacity 0.15s; }
+.btn-commit:not(:disabled):active { background: #1a3a8a; }
+.btn-commit:disabled { opacity: 0.25; cursor: default; }
+
+/* SELECTION BANNER */
+.sel-banner { margin: 8px 12px 2px; background: #e8411a; border-radius: 8px; padding: 10px 12px; display: none; align-items: center; gap: 8px; }
+.sel-banner.on { display: flex; }
+.sel-text { font-size: 12px; font-weight: 700; color: white; flex: 1; line-height: 1.3; }
+.sel-cancel { background: rgba(0,0,0,0.25); border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: white; }
+
+/* SAVE BOX */
+.save-box { margin: 10px 12px 4px; background: #111e35; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); padding: 12px 14px; }
+.save-box-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #4dcfea; margin-bottom: 10px; }
+.save-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.name-input { flex: 1; padding: 9px 11px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.15); background: #0a1628; color: white; font-size: 14px; outline: none; min-width: 0; -webkit-user-select: auto; -moz-user-select: auto; user-select: auto; cursor: text; }
+.name-input::placeholder { color: rgba(255,255,255,0.3); }
+.name-input:focus { border-color: #4dcfea; }
+.btn-save { background: #e8411a; color: white; border: none; border-radius: 7px; padding: 9px 16px; font-size: 13px; font-weight: 800; cursor: pointer; }
+.btn-save:active { background: #c93510; }
+.saved-list { border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.no-sets { font-size: 12px; color: rgba(255,255,255,0.3); }
+.set-row { display: flex; align-items: center; gap: 8px; }
+.set-row-name { flex: 1; font-size: 13px; font-weight: 600; color: white; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-sm { border: none; border-radius: 5px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-load { background: rgba(77,207,234,0.15); color: #4dcfea; }
+.btn-load:active { background: rgba(77,207,234,0.25); }
+.btn-del { background: rgba(232,65,26,0.15); color: #e8411a; }
+.btn-del:active { background: rgba(232,65,26,0.25); }
+
+/* LIBRARY */
+.lib-section { padding: 10px 12px 80px; background: #0a1628; }
+.lib-divider { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.lib-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #4dcfea; white-space: nowrap; }
+.lib-line { flex: 1; height: 1px; background: rgba(255,255,255,0.1); }
+.search-box { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: #111e35; color: white; font-size: 14px; outline: none; margin-bottom: 4px; }
+.search-box::placeholder { color: rgba(255,255,255,0.3); }
+.search-box:focus { border-color: #4dcfea; }
+.group-lbl { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: #4dcfea; opacity: 0.7; padding: 12px 0 6px; }
+.plays-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; }
+.thumb { border-radius: 8px; overflow: hidden; background: #111e35; border: 2px solid rgba(255,255,255,0.1); cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; box-shadow: 0 2px 8px rgba(0,0,0,0.4); transition: border-color 0.12s, opacity 0.12s; }
+.thumb:active { opacity: 0.75; }
+.thumb.sel { border-color: #e8411a; box-shadow: 0 0 0 1px #e8411a; }
+.thumb.used { opacity: 0.25; cursor: default; }
+.thumb-title { background: #0d1f4e; color: white; font-size: 9px; font-weight: 800; padding: 4px 7px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid rgba(77,207,234,0.2); }
+.thumb img { display: block; width: 100%; height: 60px; object-fit: cover; -webkit-touch-callout: none; pointer-events: none; }
+
+/* PRINT — keep it clean white for paper */
+@media (orientation: landscape) and (max-height: 600px) {
+  .topbar { height: 42px; }
+  .topbar-logo { height: 22px; }
+  .tab-bar { padding: 0 8px; }
+  .tab-btn { padding: 6px 12px; font-size: 12px; }
+  .card-section { padding: 8px 12px 2px; display: flex; gap: 12px; align-items: flex-start; }
+  .card-label { display: none; }
+  .card-template { max-width: 55vw; }
+  .commit-wrap { padding: 6px 12px 2px; }
+  .btn-commit { padding: 8px; font-size: 12px; }
+  .sel-banner { margin: 4px 12px; padding: 7px 10px; }
+  .lib-section { padding: 6px 12px 20px; }
+  .plays-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .thumb img { height: 48px; }
+  .save-box { margin: 6px 12px; padding: 8px 12px; }
+  .group-lbl { padding: 6px 0 4px; }
+}
+
+@media print {
+  @page { size: 8.5in 11in; margin: 0.5in 2in; }
+  html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+  /* Hide everything in body EXCEPT the print area. Using :not() avoids the
+     Android Chrome bug where 'display: none' + 'display: block' on the same
+     element during print emulation leaves the element blank. */
+  body > *:not(#printArea) { display: none !important; }
+  #printArea,
+  #printArea * { visibility: visible; }
+  #printArea {
+    display: block !important;
+    position: static !important;
+  }
+  #wrap {
+    width: 4.5in;
+    margin: 0 auto;
+    display: block;
+  }
+  .pc {
+    width: 4.5in;
+    height: 2.125in;
+    padding-top: 0.0625in;
+    background: white;
+    outline: 0.5pt dashed #999;
+    margin-bottom: 0.25in;
+    box-sizing: border-box;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .pc:last-child { margin-bottom: 0; }
+  .cg {
+    width: 4.25in;
+    height: 2.0in;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 2.125in 2.125in;
+    grid-template-rows: 1.0in 1.0in;
+    overflow: hidden;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .sl {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+  .si {
+    flex: 1;
+    overflow: hidden;
+  }
+  .si img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    margin: 0;
+    padding: 0;
+    vertical-align: top;
+    font-size: 0;
+    line-height: 0;
+  }
+  .tt {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 0.18in;
+    background: white;
+    font-weight: 800;
+    padding: 0 4px;
+    box-sizing: border-box;
+    text-transform: uppercase;
+    font-family: sans-serif;
+    white-space: nowrap;
+    overflow: hidden;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border-bottom: 0.5pt solid #999;
+  }
+  .tt-title {
+    font-size: 7pt;
+    flex-shrink: 0;
+  }
+  .tt-label {
+    font-size: 10.5pt;
+    margin-left: auto;
+    padding-left: 6px;
+    flex-shrink: 0;
+  }
+  /* Card color schemes — applied to the whole card so title + label share the color */
+  .pc-red   .tt-title, .pc-red   .tt-label   { color: #d91f27; }
+  .pc-green .tt-title, .pc-green .tt-label   { color: #1f8c40; }
+  .pc-blue  .tt-title, .pc-blue  .tt-label   { color: #1a4cbf; }
+
+}
+</style>
+</head>
+<body>
+<div id="splash" onclick="enterApp()">
+<img class="splash-logo" src="images/splash-logo.png" alt="NFL Flag" />
+<div class="splash-sub">Play Card Builder</div>
+<button class="splash-btn" onclick="enterApp(); event.stopPropagation();">Build Your Plays</button>
+<div class="splash-tap">Tap anywhere to enter</div>
+<img class="splash-flags" src="images/splash-flags.png" alt="" />
+</div>
+<div id="app">
+<div class="topbar">
+<img class="topbar-logo" src="images/splash-logo.png" alt="NFL Flag" />
+<div class="topbar-spacer"></div>
+<button class="btn-10u" onclick="load10U()">10U Starter</button>
+<button class="btn-clear" onclick="clearAll()">Clear all</button>
+<button class="btn-print" onclick="doPrint()">&#x2399; Print 3</button>
+<button class="btn-pdf" onclick="downloadHdPdf()" style="background:#1f8c40;color:white;border:none;border-radius:6px;padding:7px 14px;font-size:12px;font-weight:800;cursor:pointer;margin-left:4px;">HD PDF</button>
+</div>
+<div class="tab-bar" id="tabBar"></div>
+<div class="card-section">
+  <div class="card-label" id="cardLabel">Card 1 — choose 4 plays below</div>
+  <div class="card-template" id="cardWrap">
+    <div class="card-grid" id="cardGrid"></div>
+  </div>
+</div>
+<div class="commit-wrap">
+  <button class="btn-commit" id="commitBtn" disabled>Fill all 4 slots to lock card</button>
+</div>
+<div class="sel-banner" id="selBanner">
+  <div class="sel-text" id="selText">Tap a slot above to place</div>
+  <button class="sel-cancel" onclick="cancelSel()">Cancel</button>
+</div>
+<div class="save-box">
+  <div class="save-box-title">Save / Load Set</div>
+  <div class="save-row">
+    <input class="name-input" id="nameInput" type="text" placeholder="Name this set (e.g. Week 3 Offense)" />
+    <button class="btn-save" onclick="saveSet()">Save</button>
+  </div>
+  <div class="saved-list" id="savedList"></div>
+</div>
+<div class="lib-section">
+  <div class="lib-divider">
+    <div class="lib-title">Play Library</div>
+    <div class="lib-line"></div>
+  </div>
+  <input class="search-box" id="searchInput" type="text" placeholder="Search plays..." />
+  <div id="libGrid"></div>
+</div>
+</div>
+<div id="printArea"></div>
+<script>
+const PLAYS = [
+  {title: 'Single Back Play 1', img: "images/single-back-play-1.jpg"},
+  {title: 'Single Back Play 2', img: "images/single-back-play-2.jpg"},
+  {title: 'Single Back Play 3', img: "images/single-back-play-3.jpg"},
+  {title: 'Spread Play 1', img: "images/spread-play-1.jpg"},
+  {title: 'Spread Play 2', img: "images/spread-play-2.jpg"},
+  {title: 'Spread Play 3', img: "images/spread-play-3.jpg"},
+  {title: 'Bunch Play 1', img: "images/bunch-play-1.jpg"},
+  {title: 'Bunch Play 2', img: "images/bunch-play-2.jpg"},
+  {title: 'Bunch Play 3', img: "images/bunch-play-3.jpg"},
+  {title: 'Trips Play 1', img: "images/trips-play-1.jpg"},
+  {title: 'Trips Play 2', img: "images/trips-play-2.jpg"},
+  {title: 'Trips Play 3', img: "images/trips-play-3.jpg"},
+  {title: 'Trips Stack Play 1', img: "images/trips-stack-play-1.jpg"},
+  {title: 'Trips Stack Play 2', img: "images/trips-stack-play-2.jpg"},
+  {title: 'Trips Stack Play 3', img: "images/trips-stack-play-3.jpg"},
+  {title: 'Twins Play 1', img: "images/twins-play-1.jpg"},
+  {title: 'Twins Play 2', img: "images/twins-play-2.jpg"},
+  {title: 'Twins Play 3', img: "images/twins-play-3.jpg"},
+  {title: 'Twins Stack Play 1', img: "images/twins-stack-play-1.jpg"},
+  {title: 'Twins Stack Play 2', img: "images/twins-stack-play-2.jpg"},
+  {title: 'Twins Stack Play 3', img: "images/twins-stack-play-3.jpg"},
+  {title: 'I Formation Play 1', img: "images/i-formation-play-1.jpg"},
+  {title: 'I Formation Play 2', img: "images/i-formation-play-2.jpg"},
+  {title: 'I Formation Play 3', img: "images/i-formation-play-3.jpg"},
+  {title: 'Double Back Play 1', img: "images/double-back-play-1.jpg"},
+  {title: 'Double Back Play 2', img: "images/double-back-play-2.jpg"},
+  {title: 'Double Back Play 3', img: "images/double-back-play-3.jpg"},
+  {title: 'Single Set Play 1', img: "images/single-set-play-1.jpg"},
+  {title: 'Single Set Play 2', img: "images/single-set-play-2.jpg"},
+  {title: 'Single Set Play 3', img: "images/single-set-play-3.jpg"},
+  {title: 'HB Dive', img: "images/hb-dive.jpg"},
+  {title: 'Crossbuck', img: "images/crossbuck.jpg"},
+  {title: 'End Around', img: "images/end-around.jpg"},
+  {title: 'Reverse', img: "images/reverse.jpg"},
+  {title: 'Double Reverse', img: "images/double-reverse.jpg"},
+  {title: 'Fake Double Reverse', img: "images/fake-double-reverse.jpg"},
+  {title: 'Fake Triple Reverse', img: "images/fake-triple-reverse.jpg"},
+  {title: 'HB Option', img: "images/hb-option.jpg"},
+  {title: 'QB Option', img: "images/qb-option.jpg"},
+  {title: 'NFL Flag Man', img: "images/nfl-flag-man.jpg"},
+  {title: 'Cover 1', img: "images/cover-1.jpg"},
+  {title: 'Cover 2', img: "images/cover-2.jpg"},
+  {title: 'Cover 3', img: "images/cover-3.jpg"},
+  {title: 'Cover 4', img: "images/cover-4.jpg"},
+];
+// STATE
+const NC=3, NS=4;
+let cards=[Array(NS).fill(null),Array(NS).fill(null),Array(NS).fill(null)];
+let active=0, selPlay=null;
+let savedSets=[];
+try{savedSets=JSON.parse(localStorage.getItem('nflSets')||'[]');}catch(e){}
+
+const GROUPS=[
+  {l:"Single Back",r:[0,3]},{l:"Spread",r:[3,6]},{l:"Bunch",r:[6,9]},
+  {l:"Trips",r:[9,12]},{l:"Trips Stack",r:[12,15]},
+  {l:"Twins",r:[15,18]},{l:"Twins Stack",r:[18,21]},
+  {l:"I Formation",r:[21,24]},{l:"Double Back Set",r:[24,27]},
+  {l:"Single Set",r:[27,30]},{l:"Run Plays",r:[30,39]},
+  {l:"Defensive Coverages",r:[39,44]},
+];
+
+function enterApp(){
+  document.getElementById('splash').classList.add('hide');
+  document.getElementById('app').classList.add('visible');
+  setTimeout(()=>document.getElementById('splash').style.display='none',700);
+}
+
+function usedAll(){return cards.flat().filter(x=>x!==null);}
+
+function renderTabs(){
+  const bar=document.getElementById('tabBar');
+  bar.innerHTML='';
+  for(let c=0;c<NC;c++){
+    const n=cards[c].filter(x=>x!==null).length;
+    const done=n===NS;
+    const btn=document.createElement('button');
+    btn.className='tab-btn'+(c===active?' active':'')+(done?' done':'');
+    btn.innerHTML='Card '+(c+1)+'<span class="tab-count">'+n+'/4</span>';
+    const cc=c;
+    btn.onclick=function(){active=cc;selPlay=null;hideBanner();render();};
+    bar.appendChild(btn);
+  }
+}
+
+function renderCardGrid(){
+  const grid=document.getElementById('cardGrid');
+  const wrap=document.getElementById('cardWrap');
+  const lbl=document.getElementById('cardLabel');
+  const n=cards[active].filter(x=>x!==null).length;
+  lbl.textContent='Card '+(active+1)+' — '+(n<NS?(NS-n)+' slots remaining':'All 4 filled — ready to lock!');
+  wrap.className='card-template'+(n===NS?' done-card':'');
+  grid.innerHTML='';
+  cards[active].forEach(function(pidx,i){
+    const slot=document.createElement('div');
+    const empty=pidx===null;
+    slot.className='drop-slot'+(empty?'':' filled')+(empty&&selPlay!==null?' ready':'');
+    slot.onclick=function(){if(selPlay!==null)placePlay(i);};
+    if(!empty){
+      const p=PLAYS[pidx];
+      slot.innerHTML='<div class="slot-title"><span>'+p.title+'</span><button class="slot-x">&#215;</button></div>'+
+        '<div class="slot-img-wrap"><img class="slot-img" src="'+p.img+'" /></div>';
+      slot.querySelector('.slot-x').onclick=function(e){e.stopPropagation();cards[active][i]=null;render();};
+
+    }else{
+      slot.innerHTML='<div class="slot-empty"><div class="slot-num">'+(i+1)+'</div>'+
+        '<div class="slot-hint">'+(selPlay!==null?'Tap to place':'Tap a play below')+'</div></div>';
+    }
+    grid.appendChild(slot);
+  });
+  const btn=document.getElementById('commitBtn');
+  const n2=cards[active].filter(x=>x!==null).length;
+  if(active<NC-1){
+    btn.style.display='';
+    btn.disabled=n2<NS;
+    btn.textContent=n2===NS?'Lock Card '+(active+1)+' → Build Card '+(active+2):'Fill all 4 slots to lock card';
+    btn.onclick=commitCard;
+  }else{
+    btn.style.display=n2===NS?'':'none';
+    if(n2===NS){btn.disabled=false;btn.textContent='All 3 cards ready — Print!';btn.onclick=doPrint;}
+  }
+}
+
+function renderLib(q){
+  const used=usedAll();
+  const wrap=document.getElementById('libGrid');
+  wrap.innerHTML='';
+  q=(q||'').toLowerCase();
+  GROUPS.forEach(function(g){
+    const items=PLAYS.slice(g.r[0],g.r[1]).filter(function(p){return !q||p.title.toLowerCase().includes(q);});
+    if(!items.length)return;
+    const lbl=document.createElement('div');
+    lbl.className='group-lbl';lbl.textContent=g.l;
+    wrap.appendChild(lbl);
+    const grid=document.createElement('div');
+    grid.className='plays-grid';
+    items.forEach(function(p){
+      const idx=PLAYS.indexOf(p);
+      const inUse=used.includes(idx);
+      const isSel=selPlay===idx;
+      const d=document.createElement('div');
+      d.className='thumb'+(inUse?' used':'')+(isSel?' sel':'');
+      d.innerHTML='<div class="thumb-title">'+p.title+'</div><img src="'+p.img+'" loading="lazy" />';
+      if(!inUse){
+        var holdTimer = null;
+        var touchMoved = false;
+        var touchStartX = 0, touchStartY = 0;
+
+        // PC click = pick, hold = zoom
+        d.addEventListener('click', function(){ pickPlay(idx); });
+        d.addEventListener('mousedown', function(){
+          holdTimer = setTimeout(function(){ openZoom(p.title, p.img); }, 600);
+        });
+        d.addEventListener('mouseup',    function(){ clearTimeout(holdTimer); });
+        d.addEventListener('mouseleave', function(){ clearTimeout(holdTimer); });
+
+        // Mobile: track movement to distinguish scroll from hold
+        d.addEventListener('touchstart', function(e){
+          touchMoved = false;
+          touchStartX = e.touches[0].clientX;
+          touchStartY = e.touches[0].clientY;
+          holdTimer = setTimeout(function(){
+            if(!touchMoved) openZoom(p.title, p.img);
+          }, 600);
+        }, {passive: true});
+
+        d.addEventListener('touchmove', function(e){
+          var dx = Math.abs(e.touches[0].clientX - touchStartX);
+          var dy = Math.abs(e.touches[0].clientY - touchStartY);
+          if(dx > 8 || dy > 8){
+            touchMoved = true;
+            clearTimeout(holdTimer);
+          }
+        }, {passive: true});
+
+        d.addEventListener('touchend', function(){ clearTimeout(holdTimer); }, {passive: true});
+
+        // Block context menu from appearing on long press
+        d.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+      }
+      grid.appendChild(d);
+    });
+    wrap.appendChild(grid);
+  });
+}
+
+function renderSaved(){
+  const list=document.getElementById('savedList');
+  if(!savedSets.length){list.innerHTML='<div class="no-sets">No saved sets yet</div>';return;}
+  list.innerHTML='';
+  savedSets.forEach(function(s,i){
+    const row=document.createElement('div');
+    row.className='set-row';
+    row.innerHTML='<div class="set-row-name">'+s.name+'</div>'+
+      '<button class="btn-sm btn-load">Load</button>'+
+      '<button class="btn-sm btn-del">&#128465;</button>';
+    row.querySelector('.btn-load').onclick=function(){loadSet(i);};
+    row.querySelector('.btn-del').onclick=function(){delSet(i);};
+    list.appendChild(row);
+  });
+}
+
+function render(){renderTabs();renderCardGrid();renderLib(document.getElementById('searchInput').value);renderSaved();}
+
+function pickPlay(idx){
+  selPlay=idx;
+  document.getElementById('selText').textContent=PLAYS[idx].title+' — tap a slot on Card '+(active+1);
+  document.getElementById('selBanner').className='sel-banner on';
+  window.scrollTo({top:0, behavior:'smooth'});
+  render();
+}
+function placePlay(i){
+  if(selPlay===null)return;
+  for(let c=0;c<NC;c++){const p=cards[c].indexOf(selPlay);if(p!==-1)cards[c][p]=null;}
+  cards[active][i]=selPlay;
+  selPlay=null;hideBanner();render();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function cancelSel(){selPlay=null;hideBanner();render();}
+function hideBanner(){document.getElementById('selBanner').className='sel-banner';}
+function commitCard(){
+  if(active<NC-1){active++;selPlay=null;hideBanner();render();
+    window.scrollTo({top:0, behavior:'smooth'});}
+}
+function clearAll(){
+  cards=[Array(NS).fill(null),Array(NS).fill(null),Array(NS).fill(null)];
+  active=0;selPlay=null;hideBanner();render();
+}
+function saveSet(){
+  const name=document.getElementById('nameInput').value.trim();
+  if(!name){document.getElementById('nameInput').focus();return;}
+  const ei=savedSets.findIndex(function(s){return s.name===name;});
+  const entry={name:name,cards:cards.map(function(c){return c.slice();})};
+  if(ei!==-1)savedSets[ei]=entry;else savedSets.push(entry);
+  localStorage.setItem('nflSets',JSON.stringify(savedSets));render();
+}
+function loadSet(i){
+  const s=savedSets[i];
+  cards=s.cards.map(function(c){return c.slice();});active=0;selPlay=null;
+  document.getElementById('nameInput').value=s.name;
+  hideBanner();render();window.scrollTo({top:0,behavior:'smooth'});
+}
+function delSet(i){
+  if(!confirm('Delete "'+savedSets[i].name+'"?'))return;
+  savedSets.splice(i,1);
+  localStorage.setItem('nflSets',JSON.stringify(savedSets));render();
+}
+function downloadHdPdf(){
+  var cardsToPrint = cards.filter(function(c){
+    return c.some(function(x){ return x !== null; });
+  });
+  if(!cardsToPrint.length){ alert('Add some plays first!'); return; }
+
+  var btn = document.querySelector('.btn-pdf');
+  var orig = btn ? btn.textContent : '';
+  if(btn){ btn.textContent = 'Building...'; btn.disabled = true; }
+
+  if(typeof window.jspdf === 'undefined'){
+    if(btn){ btn.textContent = orig; btn.disabled = false; }
+    alert('PDF library did not load. Please check your connection and try again.');
+    return;
+  }
+
+  // Page: 8.5x11 inches, units in points (1in = 72pt)
+  // Card: 4.5in x 2.125in, centered horizontally, 3 cards stacked vertically
+  var PT = 72;
+  var PAGE_W = 8.5 * PT;   // 612pt
+  var PAGE_H = 11 * PT;    // 792pt
+  var CARD_W = 4.5 * PT;   // 324pt
+  var CARD_H = 2.125 * PT; // 153pt
+  var GAP    = 0.25 * PT;  // 18pt between cards
+
+  // Inner grid dimensions (matches CSS: 4.25in wide, 2.0in tall, 2x2 slots of 2.125x1.0in)
+  var GRID_W = 4.25 * PT;
+  var GRID_H = 2.0 * PT;
+  var SLOT_W = GRID_W / 2;
+  var SLOT_H = GRID_H / 2;
+  var BAR_H  = 0.18 * PT;  // title bar height, 13pt
+
+  // Vertical centering: total content = 3*CARD_H + 2*GAP = 495pt
+  var totalH = cardsToPrint.length * CARD_H + (cardsToPrint.length - 1) * GAP;
+  var startY = (PAGE_H - totalH) / 2;
+  var cardX  = (PAGE_W - CARD_W) / 2;
+
+  var COLORS = [
+    {name: 'Red',   rgb: [0xd9, 0x1f, 0x27]},
+    {name: 'Green', rgb: [0x1f, 0x8c, 0x40]},
+    {name: 'Blue',  rgb: [0x1a, 0x4c, 0xbf]},
+  ];
+
+  var { jsPDF } = window.jspdf;
+  var pdf = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' });
+
+  // Helper: load an image and convert to a canvas so jsPDF can embed it at full resolution
+  function loadImage(src){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function(){ resolve(img); };
+      img.onerror = function(){ reject(new Error('Failed to load ' + src)); };
+      img.src = src;
+    });
+  }
+
+  // Gather all unique image URLs we need
+  var allImgSrcs = [];
+  cardsToPrint.forEach(function(card){
+    card.forEach(function(pidx){
+      if(pidx !== null){
+        var src = PLAYS[pidx].img;
+        if(allImgSrcs.indexOf(src) === -1) allImgSrcs.push(src);
+      }
+    });
+  });
+
+  // Load all images in parallel
+  Promise.all(allImgSrcs.map(loadImage)).then(function(loadedImgs){
+    var imgMap = {};
+    allImgSrcs.forEach(function(src, i){ imgMap[src] = loadedImgs[i]; });
+
+    // Render each card
+    cardsToPrint.forEach(function(card, cardIdx){
+      var color = COLORS[cardIdx] || COLORS[0];
+      var yTop = startY + cardIdx * (CARD_H + GAP);
+
+      // Dashed card outline
+      pdf.setLineDashPattern([2, 2], 0);
+      pdf.setDrawColor(150, 150, 150);
+      pdf.setLineWidth(0.5);
+      pdf.rect(cardX, yTop, CARD_W, CARD_H, 'S');
+      pdf.setLineDashPattern([], 0);
+
+      // Inner grid position (centered within card, 0.0625in top padding)
+      var gridX = cardX + (CARD_W - GRID_W) / 2;
+      var gridY = yTop + 0.0625 * PT;
+
+      // Draw each of the 4 slots
+      card.forEach(function(pidx, slotIdx){
+        if(pidx === null) return;
+        var play = PLAYS[pidx];
+        var col = slotIdx % 2;
+        var row = Math.floor(slotIdx / 2);
+        var sx = gridX + col * SLOT_W;
+        var sy = gridY + row * SLOT_H;
+
+        // 1. Place image (fills entire slot, below the title bar)
+        //    CSS does object-fit: cover and the title bar sits on top.
+        //    For the PDF, we just place the image filling the whole slot,
+        //    then overlay the title bar at the top.
+        var img = imgMap[play.img];
+        if(img){
+          // Draw image covering the full slot. We use a canvas to convert to
+          // high-quality JPEG, preserving the full source resolution.
+          var canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          var dataUrl = canvas.toDataURL('image/jpeg', 0.92);  // 92% quality = print-shop grade
+          pdf.addImage(dataUrl, 'JPEG', sx, sy, SLOT_W, SLOT_H, undefined, 'FAST');
+        }
+
+        // 2. Title bar (white background strip across top of slot)
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(sx, sy, SLOT_W, BAR_H, 'F');
+        // Thin separator line under the bar
+        pdf.setDrawColor(153, 153, 153);
+        pdf.setLineWidth(0.5);
+        pdf.line(sx, sy + BAR_H, sx + SLOT_W, sy + BAR_H);
+
+        // 3. Title text (left-aligned) — 7pt Helvetica Bold, uppercase, card color
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(color.rgb[0], color.rgb[1], color.rgb[2]);
+        pdf.setFontSize(7);
+        var titleY = sy + BAR_H - 3;  // baseline: 3pt up from bottom of bar
+        pdf.text(play.title.toUpperCase(), sx + 3, titleY);
+
+        // 4. Color label (right-aligned) — 10.5pt Helvetica Bold
+        pdf.setFontSize(10.5);
+        var labelText = (color.name + ' ' + (slotIdx + 1)).toUpperCase();
+        var labelW = pdf.getTextWidth(labelText);
+        pdf.text(labelText, sx + SLOT_W - labelW - 3, titleY);
+      });
+    });
+
+    // Trigger download
+    var filename = 'NFL_Flag_Play_Cards_' + new Date().toISOString().slice(0,10) + '.pdf';
+    pdf.save(filename);
+
+    if(btn){ btn.textContent = orig; btn.disabled = false; }
+  }).catch(function(err){
+    console.error(err);
+    if(btn){ btn.textContent = orig; btn.disabled = false; }
+    alert('Failed to build PDF: ' + err.message);
+  });
+}
+
+function doPrintAndroid(cardsToPrint){
+  // Build a complete standalone HTML document. Opening this as a Blob in a new tab
+  // gives us a fresh viewport and zero inheritance from the mobile app page.
+  // User taps the browser's Share/Print menu inside that new tab to print.
+
+  var COLOR_CLASSES = ['pc-red', 'pc-green', 'pc-blue'];
+  var COLOR_LABELS  = ['Red',    'Green',    'Blue'];
+
+  // Use ABSOLUTE URLs for images (the new tab's Blob URL has a different origin)
+  var basePath = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
+  var cardsHtml = '';
+  cardsToPrint.forEach(function(card, cardIdx){
+    var cc = COLOR_CLASSES[cardIdx] || '';
+    var cl = COLOR_LABELS[cardIdx]  || '';
+    cardsHtml += '<div class="pc ' + cc + '"><div class="cg">';
+    card.forEach(function(pidx, slotIdx){
+      if(pidx !== null){
+        var p = PLAYS[pidx];
+        var labelText = cl + ' ' + (slotIdx + 1);
+        var absImg = (p.img.indexOf('://') === -1) ? (basePath + p.img) : p.img;
+        cardsHtml += '<div class="sl"><div class="tt">'
+                   +   '<span class="tt-title">' + p.title + '</span>'
+                   +   '<span class="tt-label">' + labelText + '</span>'
+                   + '</div>'
+                   + '<div class="si"><img src="' + absImg + '"/></div></div>';
+      } else {
+        cardsHtml += '<div class="sl"></div>';
+      }
+    });
+    cardsHtml += '</div></div>';
+  });
+
+  // Self-contained print page. Note: inline styles here are all duplicated from
+  // the main @media print block — we are NOT touching the main file's print CSS.
+  var doc = [
+    '<!DOCTYPE html>',
+    '<html><head>',
+    '<meta charset="UTF-8">',
+    '<meta name="viewport" content="width=816">',
+    '<title>NFL Flag Play Cards</title>',
+    '<style>',
+    '  @page { size: 8.5in 11in; margin: 0.5in 2in; }',
+    '  * { box-sizing: border-box; margin: 0; padding: 0; }',
+    '  html, body { background: white; color: black; font-family: sans-serif; }',
+    '  body { padding: 20px; }',
+    '  @media print {',
+    '    html { height: 100%; }',
+    '    body {',
+    '      padding: 0;',
+    '      min-height: 100%;',
+    '      display: flex;',
+    '      flex-direction: column;',
+    '      justify-content: center;',
+    '    }',
+    '    .screen-only { display: none !important; }',
+    '  }',
+    '  .screen-only {',
+    '    position: sticky; top: 0; z-index: 10;',
+    '    background: #0d1f4e; color: white;',
+    '    padding: 12px 16px; font-size: 14px; font-weight: 700;',
+    '    display: flex; align-items: center; gap: 10px;',
+    '    margin: -20px -20px 20px -20px;',
+    '  }',
+    '  .screen-only button {',
+    '    background: #e8411a; color: white; border: none;',
+    '    padding: 8px 18px; font-size: 14px; font-weight: 800;',
+    '    border-radius: 6px; cursor: pointer;',
+    '  }',
+    '  #wrap { width: 4.5in; margin: 0 auto; }',
+    '  .pc {',
+    '    width: 4.5in; height: 2.125in;',
+    '    padding-top: 0.0625in;',
+    '    background: white;',
+    '    outline: 0.5pt dashed #999;',
+    '    margin-bottom: 0.25in;',
+    '    page-break-inside: avoid;',
+    '    break-inside: avoid;',
+    '  }',
+    '  .pc:last-child { margin-bottom: 0; }',
+    '  .cg {',
+    '    width: 4.25in; height: 2.0in; margin: 0 auto;',
+    '    display: grid;',
+    '    grid-template-columns: 2.125in 2.125in;',
+    '    grid-template-rows: 1.0in 1.0in;',
+    '    overflow: hidden;',
+    '  }',
+    '  .sl { display: flex; flex-direction: column; overflow: hidden; }',
+    '  .si { flex: 1; overflow: hidden; }',
+    '  .si img { display: block; width: 100%; height: 100%; object-fit: cover; }',
+    '  .tt {',
+    '    display: flex; align-items: center;',
+    '    width: 100%; height: 0.18in;',
+    '    background: white; font-weight: 800;',
+    '    padding: 0 4px;',
+    '    text-transform: uppercase;',
+    '    white-space: nowrap; overflow: hidden;',
+    '    border-bottom: 0.5pt solid #999;',
+    '  }',
+    '  .tt-title { font-size: 7pt; flex-shrink: 0; }',
+    '  .tt-label { font-size: 10.5pt; margin-left: auto; padding-left: 6px; flex-shrink: 0; }',
+    '  .pc-red   .tt-title, .pc-red   .tt-label { color: #d91f27; }',
+    '  .pc-green .tt-title, .pc-green .tt-label { color: #1f8c40; }',
+    '  .pc-blue  .tt-title, .pc-blue  .tt-label { color: #1a4cbf; }',
+    '</style>',
+    '</head><body>',
+    '<div class="screen-only">',
+    '  <span style="flex:1;">Tap Print below, then choose Save as PDF or your printer</span>',
+    '  <button onclick="window.print()">&#x2399; Print</button>',
+    '</div>',
+    '<div id="wrap">',
+    cardsHtml,
+    '</div>',
+    '</body></html>'
+  ].join('\n');
+
+  var blob = new Blob([doc], { type: 'text/html' });
+  var url = URL.createObjectURL(blob);
+  var w = window.open(url, '_blank');
+  if(!w){
+    alert('Please allow pop-ups for this site so printing can open in a new tab.');
+    URL.revokeObjectURL(url);
+    return;
+  }
+  // Revoke the blob URL after 60s — gives the tab plenty of time to load
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+}
+
+function doPrint(){
+  var cardsToPrint = cards.filter(function(c){
+    return c.some(function(x){ return x !== null; });
+  });
+  if(!cardsToPrint.length){ alert('Add some plays first!'); return; }
+
+  // ── ANDROID-ONLY PATH ──
+  // Android Chrome's print engine has persistent issues with printing from
+  // a mobile-viewport page. On Android, we open a self-contained print page
+  // in a new tab instead of using window.print() on the current page.
+  // Desktop and iOS continue to the original path below (which works fine).
+  var isAndroid = /Android/i.test(navigator.userAgent);
+  if(isAndroid){
+    doPrintAndroid(cardsToPrint);
+    return;
+  }
+
+  // ── ORIGINAL DESKTOP PATH (unchanged, still working on PC) ──
+  // Each filled card gets a color: 1st=red, 2nd=green, 3rd=blue
+  var COLOR_CLASSES = ['pc-red', 'pc-green', 'pc-blue'];
+  var COLOR_LABELS  = ['Red',    'Green',    'Blue'];
+
+  var body = '';
+  cardsToPrint.forEach(function(card, cardIdx){
+    var colorClass = COLOR_CLASSES[cardIdx] || '';
+    var colorLabel = COLOR_LABELS[cardIdx]  || '';
+    body += '<div class="pc ' + colorClass + '"><div class="cg">';
+    card.forEach(function(pidx, slotIdx){
+      if(pidx !== null){
+        var p = PLAYS[pidx];
+        var labelText = colorLabel + ' ' + (slotIdx + 1);
+        body += '<div class="sl"><div class="tt">'
+              +   '<span class="tt-title">' + p.title + '</span>'
+              +   '<span class="tt-label">' + labelText + '</span>'
+              + '</div>'
+              + '<div class="si"><img src="' + p.img + '"/></div></div>';
+      } else {
+        body += '<div class="sl"></div>';
+      }
+    });
+    body += '</div></div>';
+  });
+
+  var area = document.getElementById('printArea');
+  area.innerHTML = '<div id="wrap">' + body + '</div>';
+
+  // ── ANDROID CHROME VIEWPORT FIX ──
+  // The app uses <meta viewport> with initial-scale=1 + user-scalable=no for mobile UX.
+  // But Android Chrome's print engine honors those settings when rasterizing the print
+  // preview, which squeezes an 8.5-inch page into a ~400px phone viewport — rendering
+  // the content at a massive effective zoom and showing only the top-left corner.
+  //
+  // Fix: temporarily swap the viewport meta to a page-width viewport before printing,
+  // then restore it after. This makes Android render the print preview at real page size.
+  var viewportMeta = document.querySelector('meta[name="viewport"]');
+  var originalViewport = viewportMeta ? viewportMeta.getAttribute('content') : null;
+  if(viewportMeta){
+    viewportMeta.setAttribute('content', 'width=816'); // 816px = 8.5in at 96dpi
+  }
+
+  // Wait for ALL images in the print area to fully load before printing.
+  var imgs = area.querySelectorAll('img');
+  var remaining = imgs.length;
+
+  function afterAllLoaded(){
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        window.print();
+      });
+    });
+  }
+
+  // Cleanup after print — restore viewport, clear print DOM
+  function cleanup(){
+    area.innerHTML = '';
+    if(viewportMeta && originalViewport !== null){
+      viewportMeta.setAttribute('content', originalViewport);
+    }
+    window.removeEventListener('afterprint', cleanup);
+  }
+  window.addEventListener('afterprint', cleanup);
+
+  if(remaining === 0){
+    afterAllLoaded();
+    return;
+  }
+
+  function oneDone(){
+    remaining--;
+    if(remaining <= 0) afterAllLoaded();
+  }
+
+  imgs.forEach(function(img){
+    if(img.complete && img.naturalWidth > 0){
+      oneDone();
+    } else {
+      img.addEventListener('load', oneDone, { once: true });
+      img.addEventListener('error', oneDone, { once: true });
+    }
+  });
+
+  // Failsafe
+  setTimeout(function(){
+    if(remaining > 0){
+      remaining = 0;
+      afterAllLoaded();
+    }
+  }, 3000);
+}
+
+function load10U(){
+  // 12 best 10U plays: SB 1-3, Spread 1-3, Bunch 1-3, Trips 1-3
+  cards = [
+    [0, 1, 2, 3],
+    [4, 5, 6, 7],
+    [8, 9, 10, 11]
+  ];
+  active = 0;
+  selPlay = null;
+  hideBanner();
+  render();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.getElementById('searchInput').addEventListener('input',function(e){renderLib(e.target.value);});
+render();
+
+// ── DOUBLE TAP TO ZOOM ──
+let lastTap = 0;
+let zoomOverlay = null;
+
+
+
+
+function createZoomOverlay() {}
+
+function openZoom(title, imgSrc) {
+  var existing = document.getElementById('zoomOverlay');
+  if (existing) existing.remove();
+
+  var ov = document.createElement('div');
+  ov.id = 'zoomOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.95);display:flex;flex-direction:column;';
+
+  // Title bar
+  var bar = document.createElement('div');
+  bar.style.cssText = 'background:#0d1f4e;color:white;font-size:13px;font-weight:800;padding:12px 16px;text-transform:uppercase;letter-spacing:0.05em;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;';
+  bar.innerHTML = '<span>' + title + '</span><span id="zoomClose" style="font-size:22px;padding:0 6px;cursor:pointer;color:rgba(255,255,255,0.7);">&#215;</span>';
+  ov.appendChild(bar);
+
+  // Image container — fills remaining space
+  var imgArea = document.createElement('div');
+  imgArea.style.cssText = 'flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;touch-action:none;';
+
+  var img = document.createElement('img');
+  img.src = imgSrc;
+  img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;touch-action:none;user-select:none;-webkit-user-select:none;';
+  img.draggable = false;
+  imgArea.appendChild(img);
+  ov.appendChild(imgArea);
+
+  document.body.appendChild(ov);
+
+  // Close button
+  ov.querySelector('#zoomClose').onclick = function(){ ov.remove(); };
+
+  // Pinch zoom
+  var scale = 1, lastScale = 1;
+  var tx = 0, ty = 0, lastTx = 0, lastTy = 0;
+  var p1 = null, p2 = null;
+
+  function apply() {
+    img.style.transform = 'translate('+tx+'px,'+ty+'px) scale('+scale+')';
+  }
+
+  imgArea.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 1) {
+      p1 = {x: e.touches[0].clientX, y: e.touches[0].clientY, tx: tx, ty: ty};
+      p2 = null;
+    } else if (e.touches.length === 2) {
+      p1 = {x: e.touches[0].clientX, y: e.touches[0].clientY};
+      p2 = {x: e.touches[1].clientX, y: e.touches[1].clientY};
+      lastScale = scale;
+      lastTx = tx; lastTy = ty;
+    }
+  }, {passive: false});
+
+  imgArea.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    if (e.touches.length === 2 && p1 && p2) {
+      var t1 = e.touches[0], t2 = e.touches[1];
+      var newDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      var oldDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      scale = Math.max(1, Math.min(5, lastScale * newDist / oldDist));
+      apply();
+    } else if (e.touches.length === 1 && p1 && scale > 1) {
+      tx = p1.tx + (e.touches[0].clientX - p1.x);
+      ty = p1.ty + (e.touches[0].clientY - p1.y);
+      apply();
+    }
+  }, {passive: false});
+
+  imgArea.addEventListener('touchend', function(e) {
+    if (e.touches.length === 0) {
+      if (scale <= 1.05) { ov.remove(); }
+      p1 = null; p2 = null;
+      lastScale = scale; lastTx = tx; lastTy = ty;
+    } else if (e.touches.length === 1) {
+      p2 = null;
+      p1 = {x: e.touches[0].clientX, y: e.touches[0].clientY, tx: tx, ty: ty};
+    }
+  }, {passive: true});
+}
+
+function closeZoom() {
+  var ov = document.getElementById('zoomOverlay');
+  if (ov) ov.remove();
+  zoomOverlay = null;
+}
+
+// Close on escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeZoom();
+});
+
+function attachDoubleTap(el, title, imgSrc) {
+  el.addEventListener('touchend', function(e) {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      openZoom(title, imgSrc);
+    }
+    lastTap = now;
+  });
+  // Desktop: double-click
+  el.addEventListener('dblclick', function(e) {
+    e.preventDefault();
+    openZoom(title, imgSrc);
+  });
+}
+
+</script>
+</body>
+</html>
